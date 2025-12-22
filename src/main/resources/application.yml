@@ -3,3 +3,10 @@ server:
 
 app:
   name: "multi-agent-support"
+
+azure:
+  openai:
+    endpoint: ${AZURE_OPENAI_ENDPOINT}
+    key: ${AZURE_OPENAI_API_KEY}
+    deployment-name: ${AZURE_OPENAI_DEPLOYMENT_NAME}
+    api-version: ${AZURE_OPENAI_API_VERSION}

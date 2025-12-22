@@ -11,13 +11,13 @@ import java.util.concurrent.CopyOnWriteArrayList;
 @Service
 public class ConversationService {
 
-    private final Map<String, List<ChatMessage>> conversations = new ConcurrentHashMap<>();
+  private final Map<String, List<ChatMessage>> conversations = new ConcurrentHashMap<>();
 
-    public List<ChatMessage> getHistory(String conversationId) {
-        return conversations.computeIfAbsent(conversationId, id -> new CopyOnWriteArrayList<>());
-    }
+  public List<ChatMessage> getHistory(String conversationId) {
+    return conversations.computeIfAbsent(conversationId, id -> new CopyOnWriteArrayList<>());
+  }
 
-    public void addMessage(String conversationId, ChatMessage message) {
-        getHistory(conversationId).add(message);
-    }
+  public void addMessage(String conversationId, ChatMessage message) {
+    getHistory(conversationId).add(message);
+  }
 }
