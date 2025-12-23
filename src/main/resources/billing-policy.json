@@ -1,0 +1,25 @@
+{
+  "refundPolicy": {
+    "fullRefundDays": 7,
+    "partialRefundDays": 30,
+    "partialRefundPercentage": 50,
+    "noRefundDays": 30
+  },
+  "subscriptionPlans": [
+    {
+      "name": "Starter",
+      "price": 29.99,
+      "billingCycle": "monthly"
+    },
+    {
+      "name": "Pro",
+      "price": 99.99,
+      "billingCycle": "monthly"
+    },
+    {
+      "name": "Enterprise",
+      "price": 499.99,
+      "billingCycle": "yearly"
+    }
+  ]
+}

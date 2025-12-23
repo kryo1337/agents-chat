@@ -14,11 +14,17 @@ public class AzureOpenAIConfig {
   @Value("${azure.openai.key}")
   private String apiKey;
 
+  @Value("${azure.openai.timeout.connect:10000}")
+  private int connectTimeout;
+
+  @Value("${azure.openai.timeout.read:30000}")
+  private int readTimeout;
+
   @Bean
   public RestClient azureOpenAiClient() {
     var factory = new org.springframework.http.client.SimpleClientHttpRequestFactory();
-    factory.setConnectTimeout(5000);
-    factory.setReadTimeout(10000);
+    factory.setConnectTimeout(connectTimeout);
+    factory.setReadTimeout(readTimeout);
 
     return RestClient.builder()
         .requestFactory(factory)
