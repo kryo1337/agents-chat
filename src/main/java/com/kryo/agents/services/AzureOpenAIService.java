@@ -1,6 +1,7 @@
 package com.kryo.agents.services;
 
 import com.kryo.agents.exceptions.AiCallException;
+import com.kryo.agents.models.ChatMessage;
 import com.kryo.agents.models.openai.Message;
 import com.kryo.agents.models.openai.OpenAIRequest;
 import com.kryo.agents.models.openai.OpenAIResponse;
@@ -31,19 +32,28 @@ public class AzureOpenAIService {
   }
 
   public String classifyIntent(String userMessage) {
+    return classifyIntent(List.of(new ChatMessage(com.kryo.agents.models.Role.USER, userMessage)));
+  }
+
+  public String classifyIntent(List<ChatMessage> history) {
     String systemPrompt = """
         You are a helpful support routing assistant.
-        Classify the user's message into one of these categories:
-        - "technical": for API errors, integration issues, setup, bugs.
-        - "billing": for invoices, refunds, payments, subscription plans.
-        - "router": if it's general chitchat or unclear.
+        Classify the conversation intent into one of these categories based on the latest user message and context:
+        - "technical": for API errors, integration issues, setup, bugs, documentation.
+        - "billing": for invoices, refunds, payments, subscription plans, upgrading/downgrading.
+        - "router": if it's general chitchat, greeting, or unclear.
 
         Return ONLY the category name in lowercase. Do not add punctuation.
         """;
 
-    List<Message> messages = List.of(
-        Message.system(systemPrompt),
-        Message.user(userMessage));
+    List<Message> messages = new java.util.ArrayList<>();
+    messages.add(Message.system(systemPrompt));
+
+    int start = Math.max(0, history.size() - 5);
+    for (int i = start; i < history.size(); i++) {
+      ChatMessage cm = history.get(i);
+      messages.add(new Message(cm.role().name().toLowerCase(), cm.content()));
+    }
 
     try {
       Message result = sendRequest(messages);
@@ -105,5 +115,58 @@ public class AzureOpenAIService {
       logger.error("Unexpected error during OpenAI API call", e);
       throw new AiCallException("Unexpected error during OpenAI interaction", e);
     }
+  }
+
+  public boolean hasToolCalls(Message message) {
+    return message.tool_calls() != null && !message.tool_calls().isEmpty();
+  }
+
+  public Message executeToolCallLoop(List<Message> conversation, List<Tool> tools,
+      ToolExecutor executor) {
+    Message assistantMsg = sendRequest(conversation, tools);
+
+    int maxIterations = 5;
+    int iteration = 0;
+
+    while (hasToolCalls(assistantMsg) && iteration < maxIterations) {
+      iteration++;
+
+      List<Message> toolMessages = createToolMessages(assistantMsg, executor);
+      conversation.add(assistantMsg);
+      conversation.addAll(toolMessages);
+
+      assistantMsg = sendRequest(conversation, tools);
+    }
+
+    if (iteration >= maxIterations && hasToolCalls(assistantMsg)) {
+      logger.warn("Tool call loop exceeded maximum iterations: {}", maxIterations);
+    }
+
+    return assistantMsg;
+  }
+
+  private List<Message> createToolMessages(Message assistantMessage, ToolExecutor executor) {
+    return assistantMessage.tool_calls().stream()
+        .map(toolCall -> {
+          String toolResult = executeSingleToolCall(toolCall, executor);
+          return Message.tool(toolResult, toolCall.id());
+        })
+        .toList();
+  }
+
+  private String executeSingleToolCall(com.kryo.agents.models.openai.ToolCall toolCall,
+      ToolExecutor executor) {
+    logger.debug("Executing tool call: {}", toolCall.function().name());
+    try {
+      return executor.execute(toolCall.function().name(), toolCall.function().arguments());
+    } catch (Exception e) {
+      logger.error("Tool execution failed: tool={}, error={}", toolCall.function().name(), e.getMessage());
+      return String.format("{\"error\": \"%s\"}", e.getMessage());
+    }
+  }
+
+  @FunctionalInterface
+  public interface ToolExecutor {
+    String execute(String toolName, String argumentsJson);
   }
 }

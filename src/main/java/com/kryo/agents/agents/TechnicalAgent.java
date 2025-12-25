@@ -1,11 +1,13 @@
 package com.kryo.agents.agents;
 
+import com.kryo.agents.models.ChatMessage;
 import com.kryo.agents.models.DocumentChunk;
 import com.kryo.agents.models.openai.Message;
 import com.kryo.agents.services.AzureOpenAIService;
 import com.kryo.agents.services.DocumentRetrievalService;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -26,7 +28,7 @@ public class TechnicalAgent implements Agent {
   }
 
   @Override
-  public String respond(String message) {
+  public String respond(String message, List<ChatMessage> history) {
     List<DocumentChunk> chunks = retrievalService.retrieveDocuments(message);
 
     String context = chunks.stream()
@@ -56,9 +58,14 @@ public class TechnicalAgent implements Agent {
         """
         .formatted(context);
 
-    Message response = openAIService.sendRequest(List.of(
-        Message.system(systemPrompt),
-        Message.user(message)));
+    List<Message> messages = new ArrayList<>();
+    messages.add(Message.system(systemPrompt));
+
+    for (ChatMessage msg : history) {
+      messages.add(new Message(msg.role().name().toLowerCase(), msg.content()));
+    }
+
+    Message response = openAIService.sendRequest(messages);
 
     return response != null && response.content() != null ? response.content()
         : "I apologize, I could not generate a response.";

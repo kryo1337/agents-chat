@@ -42,8 +42,10 @@ public class ChatController {
 
     conversationService.addMessage(conversationId, new ChatMessage(Role.USER, userMessage));
 
-    Agent agent = orchestrator.route(userMessage);
-    String reply = agent.respond(userMessage);
+    Agent agent = orchestrator.route(conversationId, userMessage);
+
+    java.util.List<ChatMessage> history = conversationService.getHistory(conversationId);
+    String reply = agent.respond(userMessage, history);
 
     conversationService.addMessage(conversationId, new ChatMessage(Role.ASSISTANT, reply));
 
