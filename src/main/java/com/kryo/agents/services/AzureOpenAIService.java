@@ -12,6 +12,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 
+import java.io.IOException;
 import java.util.List;
 import java.util.Optional;
 
@@ -39,11 +40,16 @@ public class AzureOpenAIService {
     String systemPrompt = """
         You are a helpful support routing assistant.
         Classify the conversation intent into one of these categories based on the latest user message and context:
-        - "technical": for API errors, integration issues, setup, bugs, documentation.
-        - "billing": for invoices, refunds, payments, subscription plans, upgrading/downgrading.
-        - "router": if it's general chitchat, greeting, or unclear.
+        - "technical": for API errors, integration issues, setup, bugs, documentation, technical questions about the project (e.g., "429 error", "how to run").
+        - "billing": for invoices, refunds, payments, subscription plans, upgrading/downgrading, or if the user provides a customer ID (e.g., "customer-001", "check my account").
+        - "router": if it's general chitchat, greeting, or completely unrelated.
 
-        Return ONLY the category name in lowercase. Do not add punctuation.
+        Return ONLY the category name in lowercase (e.g., "technical", "billing", "router").
+        Do NOT answer the question.
+        Do NOT provide explanations.
+        Output a SINGLE WORD.
+        If the user mentions a customer ID or "account", it is almost always "billing".
+        If the user asks about an error code or "how to", it is "technical".
         """;
 
     List<Message> messages = new java.util.ArrayList<>();
@@ -95,8 +101,12 @@ public class AzureOpenAIService {
           .body(request)
           .retrieve()
           .onStatus(status -> status.is4xxClientError() || status.is5xxServerError(), (req, resp) -> {
-            String errorBody = new String(resp.getBody().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
-            logger.error("OpenAI API Error: Status={}, Body={}", resp.getStatusCode(), errorBody);
+            try (var body = resp.getBody()) {
+              String errorBody = new String(body.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+              logger.error("OpenAI API Error: Status={}, Body={}", resp.getStatusCode(), errorBody);
+            } catch (IOException e) {
+              logger.error("Failed to read error response body", e);
+            }
             throw new AiCallException("OpenAI API call failed with status: " + resp.getStatusCode());
           })
           .body(OpenAIResponse.class);

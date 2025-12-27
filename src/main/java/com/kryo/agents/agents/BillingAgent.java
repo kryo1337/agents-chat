@@ -44,19 +44,23 @@ public class BillingAgent implements Agent {
   @Override
   public String respond(String message, List<ChatMessage> history) {
     String systemPrompt = """
-        You are a billing support specialist.
+        You are a senior Billing Support Specialist. You handle subscription inquiries and refund requests with accuracy and empathy.
 
-        Your capabilities:
-        - Check subscription details (plan, pricing, billing cycle)
-        - Initiate refund requests and generate support tickets
-        - Explain refund policy and timelines
-        - Change subscription plans
+        YOUR CAPABILITIES:
+        - Check subscription details (plan, pricing, billing cycle).
+        - Initiate refund requests and generate support tickets.
+        - Explain refund policy and timelines.
+        - Change subscription plans.
 
-        Guidelines:
-        - ALWAYS ask for customerId if needed before calling tools
-        - Be helpful but follow refund policy strictly
-        - Provide clear, accurate information from tool results
-        - If a customer is not eligible for a refund, explain the policy gently
+        CORE GUIDELINES:
+        - EXTRACTION: Use `customerId` and `reason` if provided in the user's message. Do NOT ask for them again if present.
+        - PERSONALIZATION: When reporting results, explicitly state which specific part of the policy applies to the user. (e.g., "Since you requested this within 7 days, you qualify for a Full Refund").
+        - ACCURACY: Report tool outputs exactly. Do not speculate on dates.
+
+        SITUATIONAL GUIDELINES:
+        - REFUSALS: If a refund is denied based on policy, explain why clearly but gently.
+        - PRIVACY: Do not repeat full customer IDs unless confirming them.
+        - TONE: Helpful, reassuring, and concise.
 
         Available tools: checkSubscription, initiateRefund, explainRefundPolicy, changePlan
         """;
@@ -111,7 +115,8 @@ public class BillingAgent implements Agent {
     if (args.has("customerId")) {
       String customerId = args.get("customerId").asText();
       if (customerId == null || customerId.isBlank() || customerId.length() >= MAX_CUSTOMER_ID_LENGTH) {
-        logger.warn("Security validation failed: Invalid customerId '{}' for function '{}'", customerId,
+        logger.warn("Security validation failed: Invalid customerId '{}' for function '{}'",
+            customerId != null ? customerId.replaceAll("[\\r\\n]", "_") : "null",
             functionName);
         throw new IllegalArgumentException(
             "Invalid customerId: must be non-empty and under " + MAX_CUSTOMER_ID_LENGTH + " characters");
@@ -249,8 +254,7 @@ public class BillingAgent implements Agent {
         "Get the refund policy details including timeframes and percentages",
         Map.of(
             "type", "object",
-            "properties", Map.of()
-        )));
+            "properties", Map.of())));
   }
 
   private Tool buildChangePlanTool() {

@@ -1,5 +1,6 @@
 package com.kryo.agents.agents;
 
+import com.kryo.agents.config.AppConstants;
 import com.kryo.agents.models.ChatMessage;
 import com.kryo.agents.services.AzureOpenAIService;
 import com.kryo.agents.services.ConversationService;
@@ -18,7 +19,6 @@ import java.util.stream.Collectors;
 public class AgentOrchestrator {
 
   private static final Logger logger = LoggerFactory.getLogger(AgentOrchestrator.class);
-  private static final int MAX_TRACKED_CONVERSATIONS = 100;
 
   private final Map<String, Agent> agentMap;
   private final Map<String, String> conversationAgentMap;
@@ -32,10 +32,10 @@ public class AgentOrchestrator {
     this.openAIService = openAIService;
     this.conversationService = conversationService;
     this.conversationAgentMap = Collections.synchronizedMap(
-        new LinkedHashMap<String, String>(MAX_TRACKED_CONVERSATIONS, 0.75f, true) {
+        new LinkedHashMap<String, String>(AppConstants.MAX_TRACKED_CONVERSATIONS, 0.75f, true) {
           @Override
           protected boolean removeEldestEntry(Map.Entry<String, String> eldest) {
-            return size() > MAX_TRACKED_CONVERSATIONS;
+            return size() > AppConstants.MAX_TRACKED_CONVERSATIONS;
           }
         });
   }
@@ -53,7 +53,7 @@ public class AgentOrchestrator {
     String currentAgent = getCurrentAgent(conversationId);
 
     List<ChatMessage> history = (conversationId != null)
-        ? conversationService.getHistory(conversationId)
+        ? conversationService.getRecentHistory(conversationId, AppConstants.MAX_CONTEXT_MESSAGES)
         : Collections.singletonList(new ChatMessage(com.kryo.agents.models.Role.USER, userMessage));
 
     if (history.isEmpty()) {
@@ -63,7 +63,13 @@ public class AgentOrchestrator {
     String suggestedAgent = openAIService.classifyIntent(history);
 
     String normalizedSuggested = normalizeAgentName(suggestedAgent);
-    String finalAgent = determineFinalAgent(currentAgent, normalizedSuggested, userMessage);
+
+    if (!agentMap.containsKey(normalizedSuggested) && !"router".equals(normalizedSuggested)) {
+      logger.warn("Model suggested unknown agent '{}', defaulting to router", normalizedSuggested);
+      normalizedSuggested = "router";
+    }
+
+    String finalAgent = determineFinalAgent(currentAgent, normalizedSuggested);
 
     if (conversationId != null) {
       updateConversationAgent(conversationId, finalAgent);
@@ -93,7 +99,7 @@ public class AgentOrchestrator {
     return agentName.toLowerCase().replaceAll("[^a-z]", "");
   }
 
-  private String determineFinalAgent(String currentAgent, String suggestedAgent, String userMessage) {
+  private String determineFinalAgent(String currentAgent, String suggestedAgent) {
     if (currentAgent == null) {
       return suggestedAgent.isEmpty() ? "router" : suggestedAgent;
     }
